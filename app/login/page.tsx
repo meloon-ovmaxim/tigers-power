@@ -13,15 +13,32 @@ export default function LoginPage() {
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setError('')
-    console.log('Trying login with URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
     setLoading(true)
     const supabase = createClient()
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
-    if (authError) { setError('Неверный логин или пароль'); setLoading(false); return }
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) { setError('Ошибка входа'); setLoading(false); return }
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single()
-    router.replace(profile?.role === 'coach' ? '/coach' : '/athlete')
+
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password })
+
+    if (authError) {
+      setError('Неверный логин или пароль')
+      setLoading(false)
+      return
+    }
+
+    console.log('Logged in user ID:', data.user?.id)
+
+    const { data: profile, error: profError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', data.user?.id)
+      .single()
+
+    console.log('Profile:', profile, 'ProfileError:', profError)
+
+    if (profile?.role === 'coach') {
+      router.replace('/coach')
+    } else {
+      router.replace('/athlete')
+    }
   }
 
   return (
@@ -29,7 +46,6 @@ export default function LoginPage() {
       minHeight: '100vh', display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center', padding: '24px'
     }}>
-      {/* Logo */}
       <div style={{ textAlign: 'center', marginBottom: '40px' }}>
         <div style={{
           width: 64, height: 64, borderRadius: 16,
@@ -43,7 +59,6 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Form */}
       <form onSubmit={handleLogin} style={{ width: '100%', maxWidth: 360 }}>
         <div className="form-group">
           <label className="label">Логин (email)</label>

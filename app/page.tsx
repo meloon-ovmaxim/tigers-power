@@ -8,17 +8,22 @@ export default function RootPage() {
 
   useEffect(() => {
     const supabase = createClient()
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) { router.replace('/login'); return }
-      supabase
+      
+      const { data, error } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', session.user.id)
         .single()
-        .then(({ data }) => {
-          if (data?.role === 'coach') router.replace('/coach')
-          else router.replace('/athlete')
-        })
+      
+      console.log('Profile data:', data, 'Error:', error, 'User ID:', session.user.id)
+      
+      if (data?.role === 'coach') {
+        router.replace('/coach')
+      } else {
+        router.replace('/athlete')
+      }
     })
   }, [router])
 
