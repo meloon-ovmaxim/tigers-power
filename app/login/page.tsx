@@ -13,6 +13,7 @@ export default function LoginPage() {
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    console.log('Trying login with URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
     setLoading(true)
     const supabase = createClient()
     const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
