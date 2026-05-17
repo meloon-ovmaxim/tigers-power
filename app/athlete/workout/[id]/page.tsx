@@ -61,6 +61,7 @@ export default function WorkoutPlayer() {
   const [totalSets, setTotalSets] = useState(0)
   const [totalVol, setTotalVol] = useState(0)
   const [motivMsg, setMotivMsg] = useState('')
+  const [isFinished, setIsFinished] = useState(false)
 
   // Session persist - save progress to localStorage
   const SESSION_KEY = `tp_session_${id}`
@@ -96,7 +97,16 @@ export default function WorkoutPlayer() {
       }
       setFlat(fl)
 
-      // Restore saved session
+      // Check if workout already finished
+      const { data: finishedSession } = await supabase
+        .from('workout_sessions')
+        .select('id')
+        .eq('day_id', id)
+        .not('finished_at', 'is', null)
+        .limit(1)
+      if (finishedSession && finishedSession.length > 0) setIsFinished(true)
+
+      // Restore saved in-progress session
       try {
         const saved = localStorage.getItem(SESSION_KEY)
         if (saved) {
@@ -108,7 +118,8 @@ export default function WorkoutPlayer() {
           setTotalSets(parsed.totalSets ?? 0)
           setTotalVol(parsed.totalVol ?? 0)
           setPtSets(parsed.ptSets ?? [])
-          if (parsed.sessionId) setScreen('player')
+          const alreadyDone = finishedSession && finishedSession.length > 0
+          if (parsed.sessionId && !alreadyDone) setScreen('player')
         }
       } catch {}
     }
@@ -356,7 +367,6 @@ export default function WorkoutPlayer() {
           </div>
         ))}
       </div>
-      {/* FIX 8: button right after last exercise, no large size */}
       <div style={{ padding: '12px 16px 20px', borderTop: '1px solid var(--border)', background: 'var(--bg)' }}>
         {hasActiveSession ? (
           <div style={{ display: 'flex', gap: 8 }}>
@@ -367,6 +377,16 @@ export default function WorkoutPlayer() {
             <button className="btn btn-danger" style={{ justifyContent: 'center', whiteSpace: 'nowrap' }}
               onClick={handleFinish}>
               Завершить
+            </button>
+          </div>
+        ) : isFinished ? (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, padding: '6px 12px', background: 'var(--greenbg)', border: '1px solid var(--greenbdr)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--green)', fontWeight: 600 }}>
+              ✓ Тренировка выполнена
+            </div>
+            <button className="btn btn-outline btn-full" style={{ justifyContent: 'center' }}
+              onClick={() => { clearSession(); setIsFinished(false); startSession() }}>
+              Начать тренировку заново
             </button>
           </div>
         ) : (
