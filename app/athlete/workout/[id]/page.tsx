@@ -256,8 +256,8 @@ export default function WorkoutPlayer() {
         ))}
       </div>
       <div className="finish-bar">
-        <button className="btn btn-primary btn-full" style={{ justifyContent: 'center', padding: '12px' }} onClick={startSession}>
-          ▶ Начать тренировку
+        <button className="btn btn-primary btn-full" style={{ justifyContent: "center" }} onClick={startSession}>
+          Начать тренировку
         </button>
       </div>
     </div>
@@ -276,7 +276,7 @@ export default function WorkoutPlayer() {
         <div className="stat-box"><div className="stat-num">{day.blocks?.flatMap((b: any) => b.block_exercises).length}</div><div className="stat-label">упражнений</div></div>
         <div className="stat-box"><div className="stat-num">{(totalVol / 1000).toFixed(1)}т</div><div className="stat-label">объём</div></div>
       </div>
-      <button className="btn btn-primary btn-full btn-large" onClick={() => router.replace('/athlete')}>
+      <button className="btn btn-primary btn-full" onClick={() => router.replace('/athlete')}>
         На главную
       </button>
     </div>
@@ -322,7 +322,7 @@ export default function WorkoutPlayer() {
         </div>
         <div className="finish-bar">
           <button className="btn btn-full btn-ghost" style={{ justifyContent: 'center', fontSize: 13 }} onClick={handleFinish}>
-            🏁 Завершить тренировку
+            Завершить тренировку
           </button>
         </div>
       </div>
@@ -423,7 +423,7 @@ export default function WorkoutPlayer() {
     <div className="page" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center', minHeight: '100vh' }}>
       <div style={{ fontSize: 40, marginBottom: 16 }}>✅</div>
       <h2 style={{ marginBottom: 16 }}>Все подходы выполнены!</h2>
-      <button className="btn btn-primary btn-large" onClick={handleFinish}>🏁 Завершить тренировку</button>
+      <button className="btn btn-primary" onClick={handleFinish}>Завершить тренировку</button>
     </div>
   )
 
@@ -457,7 +457,7 @@ export default function WorkoutPlayer() {
         {be.video_url && (
           <a href={be.video_url} target="_blank" rel="noopener noreferrer"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginBottom: 10, fontSize: 11, color: 'var(--accent2)', padding: '4px 10px', background: 'var(--accentbg)', border: '1px solid var(--accentbdr)', borderRadius: 8, textDecoration: 'none' }}>
-            ▶ Видео-инструкция
+            Видео-инструкция
           </a>
         )}
 
@@ -532,8 +532,8 @@ export default function WorkoutPlayer() {
       </div>
 
       <div className="finish-bar">
-        <button className="btn btn-primary btn-full" style={{ justifyContent: 'center' }} onClick={handleFinish}>
-          🏁 Завершить тренировку
+        <button className="btn btn-primary btn-full" style={{ justifyContent: "center" }} onClick={handleFinish}>
+          Завершить тренировку
         </button>
       </div>
     </div>

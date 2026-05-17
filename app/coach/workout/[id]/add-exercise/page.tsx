@@ -12,13 +12,21 @@ interface SetDraft {
   is_warmup: boolean
 }
 
-function emptySet(): SetDraft {
-  return { reps: '', weight_kg: '', weight_pct: '', rest_sec: '90', rpe_enabled: false, is_warmup: false }
+function emptySet(prev?: SetDraft): SetDraft {
+  return {
+    reps: prev?.reps ?? '',
+    weight_kg: prev?.weight_kg ?? '',
+    weight_pct: prev?.weight_pct ?? '',
+    rest_sec: prev?.rest_sec ?? '90',
+    rpe_enabled: false,
+    is_warmup: prev?.is_warmup ?? false,
+  }
 }
 
 export default function AddExercise() {
   const router = useRouter()
   const { id: workoutId } = useParams<{ id: string }>()
+
   const [exercises, setExercises] = useState<any[]>([])
   const [search, setSearch] = useState('')
   const [showSearch, setShowSearch] = useState(false)
@@ -36,22 +44,20 @@ export default function AddExercise() {
 
   useEffect(() => {
     const supabase = createClient()
-    supabase.from('exercises').select('*').order('name').then(({ data }) => setExercises(data ?? []))
+    supabase.from('exercises').select('*').order('name')
+      .then(({ data }) => setExercises(data ?? []))
   }, [])
 
-  const filtered = exercises.filter(e =>
-    e.name.toLowerCase().includes(search.toLowerCase())
-  ).slice(0, 8)
+  const filtered = exercises
+    .filter(e => e.name.toLowerCase().includes(search.toLowerCase()))
+    .slice(0, 8)
 
   function updateSet(idx: number, field: keyof SetDraft, value: any) {
     setSets(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s))
   }
 
   function addSet() {
-    setSets(prev => {
-      const last = prev[prev.length - 1]
-      return [...prev, { ...last, rpe_enabled: false }]
-    })
+    setSets(prev => [...prev, emptySet(prev[prev.length - 1])])
   }
 
   function removeSet(idx: number) {
@@ -59,13 +65,32 @@ export default function AddExercise() {
     setSets(prev => prev.filter((_, i) => i !== idx))
   }
 
+  async function createNewExercise() {
+    if (!newExName.trim()) return
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    const { data } = await supabase.from('exercises')
+      .insert({ name: newExName.trim(), created_by: session?.user.id })
+      .select().single()
+    if (data) {
+      setExercises(prev => [...prev, data])
+      setSelected(data)
+      setSearch(data.name)
+      setShowNewEx(false)
+      setNewExName('')
+      setShowSearch(false)
+    }
+  }
+
   async function handleSave() {
     if (!selected) { alert('Выбери упражнение'); return }
     setSaving(true)
     const supabase = createClient()
 
+    // get current max position
     const { data: existing } = await supabase
-      .from('workout_blocks').select('position').eq('day_id', workoutId)
+      .from('workout_blocks').select('position')
+      .eq('day_id', workoutId)
       .order('position', { ascending: false }).limit(1)
     const pos = (existing?.[0]?.position ?? -1) + 1
 
@@ -78,7 +103,9 @@ export default function AddExercise() {
     const { data: be } = await supabase
       .from('block_exercises')
       .insert({
-        block_id: block.id, exercise_id: selected.id, position: 0,
+        block_id: block.id,
+        exercise_id: selected.id,
+        position: 0,
         coach_comment: comment || null,
         video_url: videoUrl || null,
         is_passthrough: isPassthrough,
@@ -88,9 +115,18 @@ export default function AddExercise() {
     if (!be) { setSaving(false); return }
 
     const setsToInsert = isPassthrough
-      ? [{ be_id: be.id, set_number: 1, reps: parseInt(ptWarmupReps) || 5, weight_kg: ptWarmupWeight ? parseFloat(ptWarmupWeight) : null, rest_sec: 90, is_warmup: true, rpe_enabled: false }]
+      ? [{
+          be_id: be.id,
+          set_number: 1,
+          reps: parseInt(ptWarmupReps) || 5,
+          weight_kg: ptWarmupWeight ? parseFloat(ptWarmupWeight) : null,
+          rest_sec: 90,
+          is_warmup: true,
+          rpe_enabled: false,
+        }]
       : sets.map((s, i) => ({
-          be_id: be.id, set_number: i + 1,
+          be_id: be.id,
+          set_number: i + 1,
           reps: s.reps ? parseInt(s.reps) : null,
           weight_kg: s.weight_kg ? parseFloat(s.weight_kg) : null,
           weight_pct: s.weight_pct ? parseInt(s.weight_pct) : null,
@@ -103,46 +139,46 @@ export default function AddExercise() {
     router.back()
   }
 
-  async function createNewExercise() {
-    if (!newExName.trim()) return
-    const supabase = createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    const { data } = await supabase.from('exercises')
-      .insert({ name: newExName.trim(), created_by: session?.user.id })
-      .select().single()
-    if (data) {
-      setExercises(prev => [...prev, data])
-      setSelected(data); setSearch(data.name)
-      setShowNewEx(false); setNewExName('')
-      setShowSearch(false)
-    }
-  }
-
   return (
     <div className="page">
       <div className="topbar">
         <button className="btn btn-ghost btn-sm" onClick={() => router.back()}>← Назад</button>
         <span style={{ fontWeight: 600, fontSize: 15 }}>Добавить упражнение</span>
-        <button className="btn btn-sm btn-primary" onClick={handleSave} disabled={!selected || saving}>
-          {saving ? '...' : 'Сохранить'}
+        <button
+          className="btn btn-sm btn-primary"
+          onClick={handleSave}
+          disabled={!selected || saving}
+        >
+          {saving ? 'Сохраняем...' : 'Сохранить'}
         </button>
       </div>
 
       <div className="content">
-        {/* Exercise picker */}
+
+        {/* ── Поиск упражнения ── */}
         <div className="form-group">
           <label className="label">Упражнение</label>
           {selected ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ flex: 1, padding: '10px 12px', background: 'var(--accentbg)', border: '1px solid var(--accentbdr)', borderRadius: 'var(--radius)', fontSize: 14, color: 'var(--accent2)', fontWeight: 600 }}>
+              <div style={{
+                flex: 1, padding: '10px 12px',
+                background: 'var(--accentbg)', border: '1px solid var(--accentbdr)',
+                borderRadius: 'var(--radius)', fontSize: 14, color: 'var(--accent2)', fontWeight: 600,
+              }}>
                 ✓ {selected.name}
               </div>
-              <button className="btn btn-sm btn-ghost" onClick={() => { setSelected(null); setSearch(''); }}>Изменить</button>
+              <button className="btn btn-sm btn-ghost"
+                onClick={() => { setSelected(null); setSearch('') }}>
+                Изменить
+              </button>
             </div>
           ) : (
             <>
-              <input className="input" placeholder="Начни вводить название..."
-                value={search} autoFocus
+              <input
+                className="input"
+                placeholder="Начни вводить название..."
+                value={search}
+                autoFocus
                 onChange={e => { setSearch(e.target.value); setShowSearch(true) }}
                 onFocus={() => setShowSearch(true)}
               />
@@ -174,49 +210,75 @@ export default function AddExercise() {
 
         {selected && (
           <>
-            {/* Video URL */}
+            {/* ── Видео ── */}
             <div className="form-group">
               <label className="label">Видео-инструкция (ссылка)</label>
-              <input className="input" placeholder="https://youtube.com/..."
-                value={videoUrl} onChange={e => setVideoUrl(e.target.value)} />
+              <input
+                className="input"
+                placeholder="https://youtube.com/..."
+                value={videoUrl}
+                onChange={e => setVideoUrl(e.target.value)}
+              />
               {videoUrl && (
-                <a href={videoUrl} target="_blank" rel="noopener noreferrer"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12, color: 'var(--accent2)', padding: '4px 10px', background: 'var(--accentbg)', border: '1px solid var(--accentbdr)', borderRadius: 8, textDecoration: 'none' }}>
+                <a
+                  href={videoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    marginTop: 6, fontSize: 12, color: 'var(--accent2)',
+                    padding: '4px 10px', background: 'var(--accentbg)',
+                    border: '1px solid var(--accentbdr)', borderRadius: 8,
+                    textDecoration: 'none',
+                  }}>
                   ▶ Открыть видео
                 </a>
               )}
             </div>
 
-            {/* Passthrough toggle */}
-            <div onClick={() => setIsPassthrough(!isPassthrough)} style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '10px 12px', background: isPassthrough ? 'var(--accentbg)' : 'var(--bg3)',
-              borderRadius: 'var(--radius)', marginBottom: 16, cursor: 'pointer',
-              border: `1px solid ${isPassthrough ? 'var(--accentbdr)' : 'var(--border)'}`,
-              transition: 'all .15s'
-            }}>
-              <input type="checkbox" checked={isPassthrough} onChange={() => {}}
-                style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+            {/* ── Проходка ── */}
+            <div
+              onClick={() => setIsPassthrough(!isPassthrough)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '10px 12px', borderRadius: 'var(--radius)',
+                marginBottom: 16, cursor: 'pointer',
+                background: isPassthrough ? 'var(--accentbg)' : 'var(--bg3)',
+                border: `1px solid ${isPassthrough ? 'var(--accentbdr)' : 'var(--border)'}`,
+                transition: 'all .15s',
+              }}>
+              <input
+                type="checkbox" checked={isPassthrough} onChange={() => {}}
+                style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }}
+              />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>⚡ Режим проходки</div>
-                <div style={{ fontSize: 11, color: 'var(--text2)' }}>Подопечный добавляет рабочие подходы сам</div>
+                <div style={{ fontSize: 11, color: 'var(--text2)' }}>
+                  Подопечный добавляет рабочие подходы сам
+                </div>
               </div>
             </div>
 
             {isPassthrough ? (
               <>
-                <div style={{ background: 'var(--accentbg)', border: '1px solid var(--accentbdr)', borderRadius: 'var(--radius)', padding: '10px 12px', fontSize: 12, color: 'var(--accent3)', marginBottom: 14 }}>
-                  Ты задаёшь разминочный подход. Рабочие — добавляет подопечный до предела. RPE обязателен.
+                <div style={{
+                  background: 'var(--accentbg)', border: '1px solid var(--accentbdr)',
+                  borderRadius: 'var(--radius)', padding: '10px 12px',
+                  fontSize: 12, color: 'var(--accent3)', marginBottom: 14,
+                }}>
+                  Ты задаёшь разминочный подход. Рабочие добавляет подопечный до предела. RPE обязателен.
                 </div>
                 <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Разминочный подход</div>
                 <div className="grid-2">
                   <div className="form-group">
                     <label className="label">Повторений</label>
-                    <input className="input" placeholder="5" value={ptWarmupReps} onChange={e => setPtWarmupReps(e.target.value)} />
+                    <input className="input" placeholder="5"
+                      value={ptWarmupReps} onChange={e => setPtWarmupReps(e.target.value)} />
                   </div>
                   <div className="form-group">
                     <label className="label">Вес (кг или %ПМ)</label>
-                    <input className="input" placeholder="60 / 50%" value={ptWarmupWeight} onChange={e => setPtWarmupWeight(e.target.value)} />
+                    <input className="input" placeholder="60 / 50%"
+                      value={ptWarmupWeight} onChange={e => setPtWarmupWeight(e.target.value)} />
                   </div>
                 </div>
                 <div className="form-group">
@@ -227,8 +289,10 @@ export default function AddExercise() {
               </>
             ) : (
               <>
-                <div className="row" style={{ marginBottom: 10 }}>
+                {/* ── Подходы ── */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                   <div style={{ fontWeight: 600, fontSize: 13 }}>Подходы</div>
+                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>{sets.length} подх.</span>
                 </div>
 
                 {sets.map((s, idx) => (
@@ -236,34 +300,37 @@ export default function AddExercise() {
                     background: 'var(--bg3)', border: '1px solid var(--border)',
                     borderRadius: 'var(--radius)', padding: '12px', marginBottom: 8,
                   }}>
-                    {/* Set header */}
+                    {/* Заголовок подхода */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <div style={{
                           width: 24, height: 24, borderRadius: 6,
                           background: 'var(--accentbg)', border: '1px solid var(--accentbdr)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 11, fontWeight: 700, color: 'var(--accent2)'
-                        }}>{idx + 1}</div>
-                        <span style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 500 }}>
-                          {s.is_warmup ? '· Разминочный' : '· Рабочий'}
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text3)', cursor: 'pointer' }}>
-                          <input type="checkbox" checked={s.is_warmup}
+                          fontSize: 11, fontWeight: 700, color: 'var(--accent2)',
+                        }}>
+                          {idx + 1}
+                        </div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text2)', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={s.is_warmup}
                             onChange={e => updateSet(idx, 'is_warmup', e.target.checked)}
-                            style={{ accentColor: 'var(--accent)' }} />
-                          Разм.
+                            style={{ accentColor: 'var(--accent)' }}
+                          />
+                          Разминочный
                         </label>
-                        {sets.length > 1 && (
-                          <button onClick={() => removeSet(idx)}
-                            style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '0 4px' }}>×</button>
-                        )}
                       </div>
+                      {sets.length > 1 && (
+                        <button
+                          onClick={() => removeSet(idx)}
+                          style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: '0 4px' }}>
+                          ×
+                        </button>
+                      )}
                     </div>
 
-                    {/* Reps + Weight */}
+                    {/* Повторения + Вес */}
                     <div className="grid-2" style={{ marginBottom: 8 }}>
                       <div>
                         <label className="label">Повторений</label>
@@ -277,7 +344,7 @@ export default function AddExercise() {
                       </div>
                     </div>
 
-                    {/* %PM + Rest */}
+                    {/* % ПМ + Отдых */}
                     <div className="grid-2" style={{ marginBottom: 8 }}>
                       <div>
                         <label className="label">% от ПМ</label>
@@ -293,28 +360,32 @@ export default function AddExercise() {
 
                     {/* RPE */}
                     <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text2)' }}>
-                      <input type="checkbox" checked={s.rpe_enabled}
+                      <input
+                        type="checkbox"
+                        checked={s.rpe_enabled}
                         onChange={e => updateSet(idx, 'rpe_enabled', e.target.checked)}
-                        style={{ width: 15, height: 15, accentColor: 'var(--accent)' }} />
+                        style={{ width: 15, height: 15, accentColor: 'var(--accent)' }}
+                      />
                       Спросить RPE после подхода
                     </label>
                   </div>
                 ))}
 
-                {/* Buttons: duplicate last set + add empty */}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn btn-outline" style={{ flex: 1, justifyContent: 'center' }} onClick={addSet}>
-                    + Ещё подход
-                  </button>
-                </div>
+                <button className="btn btn-outline btn-full" style={{ justifyContent: 'center' }} onClick={addSet}>
+                  + Ещё подход
+                </button>
               </>
             )}
 
-            {/* Comment */}
+            {/* ── Комментарий ── */}
             <div className="form-group" style={{ marginTop: 16 }}>
               <label className="label">Комментарий тренера</label>
-              <textarea className="textarea" placeholder="Техника выполнения, рекомендации..."
-                value={comment} onChange={e => setComment(e.target.value)} />
+              <textarea
+                className="textarea"
+                placeholder="Техника выполнения, рекомендации..."
+                value={comment}
+                onChange={e => setComment(e.target.value)}
+              />
             </div>
           </>
         )}
