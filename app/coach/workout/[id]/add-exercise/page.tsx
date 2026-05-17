@@ -2,7 +2,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { BackButton } from '@/components/ui'
 
 interface SetDraft {
   reps: string
@@ -22,8 +21,9 @@ export default function AddExercise() {
   const { id: workoutId } = useParams<{ id: string }>()
   const [exercises, setExercises] = useState<any[]>([])
   const [search, setSearch] = useState('')
+  const [showSearch, setShowSearch] = useState(false)
   const [selected, setSelected] = useState<any | null>(null)
-  const [sets, setSets] = useState<SetDraft[]>([emptySet(), emptySet(), emptySet()])
+  const [sets, setSets] = useState<SetDraft[]>([emptySet()])
   const [comment, setComment] = useState('')
   const [videoUrl, setVideoUrl] = useState('')
   const [isPassthrough, setIsPassthrough] = useState(false)
@@ -39,14 +39,19 @@ export default function AddExercise() {
     supabase.from('exercises').select('*').order('name').then(({ data }) => setExercises(data ?? []))
   }, [])
 
-  const filtered = exercises.filter(e => e.name.toLowerCase().includes(search.toLowerCase())).slice(0, 6)
+  const filtered = exercises.filter(e =>
+    e.name.toLowerCase().includes(search.toLowerCase())
+  ).slice(0, 8)
 
   function updateSet(idx: number, field: keyof SetDraft, value: any) {
     setSets(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s))
   }
 
   function addSet() {
-    setSets(prev => [...prev, emptySet()])
+    setSets(prev => {
+      const last = prev[prev.length - 1]
+      return [...prev, { ...last, rpe_enabled: false }]
+    })
   }
 
   function removeSet(idx: number) {
@@ -55,16 +60,13 @@ export default function AddExercise() {
   }
 
   async function handleSave() {
-    if (!selected) return
+    if (!selected) { alert('Выбери упражнение'); return }
     setSaving(true)
     const supabase = createClient()
 
     const { data: existing } = await supabase
-      .from('workout_blocks')
-      .select('position')
-      .eq('day_id', workoutId)
-      .order('position', { ascending: false })
-      .limit(1)
+      .from('workout_blocks').select('position').eq('day_id', workoutId)
+      .order('position', { ascending: false }).limit(1)
     const pos = (existing?.[0]?.position ?? -1) + 1
 
     const { data: block } = await supabase
@@ -76,9 +78,7 @@ export default function AddExercise() {
     const { data: be } = await supabase
       .from('block_exercises')
       .insert({
-        block_id: block.id,
-        exercise_id: selected.id,
-        position: 0,
+        block_id: block.id, exercise_id: selected.id, position: 0,
         coach_comment: comment || null,
         video_url: videoUrl || null,
         is_passthrough: isPassthrough,
@@ -88,15 +88,9 @@ export default function AddExercise() {
     if (!be) { setSaving(false); return }
 
     const setsToInsert = isPassthrough
-      ? [{
-          be_id: be.id, set_number: 1,
-          reps: parseInt(ptWarmupReps) || 5,
-          weight_kg: ptWarmupWeight ? parseFloat(ptWarmupWeight) : null,
-          rest_sec: 90, is_warmup: true, rpe_enabled: false,
-        }]
+      ? [{ be_id: be.id, set_number: 1, reps: parseInt(ptWarmupReps) || 5, weight_kg: ptWarmupWeight ? parseFloat(ptWarmupWeight) : null, rest_sec: 90, is_warmup: true, rpe_enabled: false }]
       : sets.map((s, i) => ({
-          be_id: be.id,
-          set_number: i + 1,
+          be_id: be.id, set_number: i + 1,
           reps: s.reps ? parseInt(s.reps) : null,
           weight_kg: s.weight_kg ? parseFloat(s.weight_kg) : null,
           weight_pct: s.weight_pct ? parseInt(s.weight_pct) : null,
@@ -113,23 +107,21 @@ export default function AddExercise() {
     if (!newExName.trim()) return
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
-    const { data } = await supabase
-      .from('exercises')
+    const { data } = await supabase.from('exercises')
       .insert({ name: newExName.trim(), created_by: session?.user.id })
       .select().single()
     if (data) {
       setExercises(prev => [...prev, data])
-      setSelected(data)
-      setSearch(data.name)
-      setShowNewEx(false)
-      setNewExName('')
+      setSelected(data); setSearch(data.name)
+      setShowNewEx(false); setNewExName('')
+      setShowSearch(false)
     }
   }
 
   return (
     <div className="page">
       <div className="topbar">
-        <BackButton onClick={() => router.back()} />
+        <button className="btn btn-ghost btn-sm" onClick={() => router.back()}>← Назад</button>
         <span style={{ fontWeight: 600, fontSize: 15 }}>Добавить упражнение</span>
         <button className="btn btn-sm btn-primary" onClick={handleSave} disabled={!selected || saving}>
           {saving ? '...' : 'Сохранить'}
@@ -137,71 +129,72 @@ export default function AddExercise() {
       </div>
 
       <div className="content">
-        {/* Exercise search */}
+        {/* Exercise picker */}
         <div className="form-group">
           <label className="label">Упражнение</label>
-          <input className="input" placeholder="Начни вводить название..."
-            value={search}
-            onChange={e => { setSearch(e.target.value); if (selected) setSelected(null) }}
-          />
-          {search.length > 0 && !selected && (
-            <div className="suggest-list">
-              {filtered.map(e => (
-                <div key={e.id} className="suggest-item"
-                  onClick={() => { setSelected(e); setSearch(e.name) }}>
-                  {e.name}
-                </div>
-              ))}
-              <div className="suggest-item" style={{ color: 'var(--accent2)' }}
-                onClick={() => { setShowNewEx(true); setNewExName(search) }}>
-                + Создать «{search}»
+          {selected ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ flex: 1, padding: '10px 12px', background: 'var(--accentbg)', border: '1px solid var(--accentbdr)', borderRadius: 'var(--radius)', fontSize: 14, color: 'var(--accent2)', fontWeight: 600 }}>
+                ✓ {selected.name}
               </div>
+              <button className="btn btn-sm btn-ghost" onClick={() => { setSelected(null); setSearch(''); }}>Изменить</button>
             </div>
-          )}
-          {showNewEx && (
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <input className="input" style={{ margin: 0 }} value={newExName}
-                onChange={e => setNewExName(e.target.value)}
-                placeholder="Название упражнения" />
-              <button className="btn btn-sm btn-primary" onClick={createNewExercise}>OK</button>
-              <button className="btn btn-sm btn-ghost" onClick={() => setShowNewEx(false)}>✕</button>
-            </div>
+          ) : (
+            <>
+              <input className="input" placeholder="Начни вводить название..."
+                value={search} autoFocus
+                onChange={e => { setSearch(e.target.value); setShowSearch(true) }}
+                onFocus={() => setShowSearch(true)}
+              />
+              {showSearch && search.length > 0 && (
+                <div className="suggest-list">
+                  {filtered.map(e => (
+                    <div key={e.id} className="suggest-item"
+                      onMouseDown={() => { setSelected(e); setSearch(e.name); setShowSearch(false) }}>
+                      {e.name}
+                    </div>
+                  ))}
+                  <div className="suggest-item" style={{ color: 'var(--accent2)' }}
+                    onMouseDown={() => { setShowNewEx(true); setNewExName(search); setShowSearch(false) }}>
+                    + Создать «{search}»
+                  </div>
+                </div>
+              )}
+              {showNewEx && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <input className="input" style={{ margin: 0 }} value={newExName}
+                    onChange={e => setNewExName(e.target.value)} placeholder="Название" />
+                  <button className="btn btn-sm btn-primary" onClick={createNewExercise}>OK</button>
+                  <button className="btn btn-sm btn-ghost" onClick={() => setShowNewEx(false)}>✕</button>
+                </div>
+              )}
+            </>
           )}
         </div>
 
         {selected && (
           <>
-            <div style={{
-              padding: '8px 12px', background: 'var(--accentbg)',
-              border: '1px solid var(--accentbdr)', borderRadius: 'var(--radius)',
-              marginBottom: 16, fontSize: 13, color: 'var(--accent2)', fontWeight: 600,
-              display: 'flex', alignItems: 'center', gap: 8
-            }}>
-              ✓ {selected.name}
-            </div>
-
             {/* Video URL */}
             <div className="form-group">
               <label className="label">Видео-инструкция (ссылка)</label>
               <input className="input" placeholder="https://youtube.com/..."
                 value={videoUrl} onChange={e => setVideoUrl(e.target.value)} />
               {videoUrl && (
-                <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="video-link" style={{ marginTop: 6, display: 'inline-flex' }}>
+                <a href={videoUrl} target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12, color: 'var(--accent2)', padding: '4px 10px', background: 'var(--accentbg)', border: '1px solid var(--accentbdr)', borderRadius: 8, textDecoration: 'none' }}>
                   ▶ Открыть видео
                 </a>
               )}
             </div>
 
             {/* Passthrough toggle */}
-            <div
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '10px 12px', background: 'var(--bg3)',
-                borderRadius: 'var(--radius)', marginBottom: 16, cursor: 'pointer',
-                border: isPassthrough ? '1px solid var(--accentbdr)' : '1px solid var(--border)',
-              }}
-              onClick={() => setIsPassthrough(!isPassthrough)}
-            >
+            <div onClick={() => setIsPassthrough(!isPassthrough)} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 12px', background: isPassthrough ? 'var(--accentbg)' : 'var(--bg3)',
+              borderRadius: 'var(--radius)', marginBottom: 16, cursor: 'pointer',
+              border: `1px solid ${isPassthrough ? 'var(--accentbdr)' : 'var(--border)'}`,
+              transition: 'all .15s'
+            }}>
               <input type="checkbox" checked={isPassthrough} onChange={() => {}}
                 style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }} />
               <div>
@@ -212,20 +205,18 @@ export default function AddExercise() {
 
             {isPassthrough ? (
               <>
-                <div className="info-box-blue">
+                <div style={{ background: 'var(--accentbg)', border: '1px solid var(--accentbdr)', borderRadius: 'var(--radius)', padding: '10px 12px', fontSize: 12, color: 'var(--accent3)', marginBottom: 14 }}>
                   Ты задаёшь разминочный подход. Рабочие — добавляет подопечный до предела. RPE обязателен.
                 </div>
                 <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Разминочный подход</div>
                 <div className="grid-2">
                   <div className="form-group">
                     <label className="label">Повторений</label>
-                    <input className="input" placeholder="5" value={ptWarmupReps}
-                      onChange={e => setPtWarmupReps(e.target.value)} />
+                    <input className="input" placeholder="5" value={ptWarmupReps} onChange={e => setPtWarmupReps(e.target.value)} />
                   </div>
                   <div className="form-group">
                     <label className="label">Вес (кг или %ПМ)</label>
-                    <input className="input" placeholder="60 / 50%" value={ptWarmupWeight}
-                      onChange={e => setPtWarmupWeight(e.target.value)} />
+                    <input className="input" placeholder="60 / 50%" value={ptWarmupWeight} onChange={e => setPtWarmupWeight(e.target.value)} />
                   </div>
                 </div>
                 <div className="form-group">
@@ -236,35 +227,43 @@ export default function AddExercise() {
               </>
             ) : (
               <>
-                {/* Individual sets */}
-                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>
-                  Подходы
+                <div className="row" style={{ marginBottom: 10 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>Подходы</div>
                 </div>
 
                 {sets.map((s, idx) => (
-                  <div key={idx} className="set-edit-row">
-                    <div className="set-edit-row-header">
+                  <div key={idx} style={{
+                    background: 'var(--bg3)', border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius)', padding: '12px', marginBottom: 8,
+                  }}>
+                    {/* Set header */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div className="set-edit-num">{idx + 1}</div>
+                        <div style={{
+                          width: 24, height: 24, borderRadius: 6,
+                          background: 'var(--accentbg)', border: '1px solid var(--accentbdr)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 11, fontWeight: 700, color: 'var(--accent2)'
+                        }}>{idx + 1}</div>
                         <span style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 500 }}>
-                          {s.is_warmup ? 'Разминочный' : 'Рабочий'}
+                          {s.is_warmup ? '· Разминочный' : '· Рабочий'}
                         </span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text2)', cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text3)', cursor: 'pointer' }}>
                           <input type="checkbox" checked={s.is_warmup}
                             onChange={e => updateSet(idx, 'is_warmup', e.target.checked)}
                             style={{ accentColor: 'var(--accent)' }} />
                           Разм.
                         </label>
                         {sets.length > 1 && (
-                          <button className="btn btn-sm btn-ghost"
-                            style={{ padding: '3px 7px', color: 'var(--red)' }}
-                            onClick={() => removeSet(idx)}>✕</button>
+                          <button onClick={() => removeSet(idx)}
+                            style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '0 4px' }}>×</button>
                         )}
                       </div>
                     </div>
 
+                    {/* Reps + Weight */}
                     <div className="grid-2" style={{ marginBottom: 8 }}>
                       <div>
                         <label className="label">Повторений</label>
@@ -278,7 +277,8 @@ export default function AddExercise() {
                       </div>
                     </div>
 
-                    <div className="grid-2">
+                    {/* %PM + Rest */}
+                    <div className="grid-2" style={{ marginBottom: 8 }}>
                       <div>
                         <label className="label">% от ПМ</label>
                         <input className="input" style={{ margin: 0 }} placeholder="75"
@@ -291,21 +291,22 @@ export default function AddExercise() {
                       </div>
                     </div>
 
-                    <div style={{ marginTop: 8 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
-                        <input type="checkbox" checked={s.rpe_enabled}
-                          onChange={e => updateSet(idx, 'rpe_enabled', e.target.checked)}
-                          style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
-                        <span>Спросить RPE после подхода</span>
-                      </label>
-                    </div>
+                    {/* RPE */}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text2)' }}>
+                      <input type="checkbox" checked={s.rpe_enabled}
+                        onChange={e => updateSet(idx, 'rpe_enabled', e.target.checked)}
+                        style={{ width: 15, height: 15, accentColor: 'var(--accent)' }} />
+                      Спросить RPE после подхода
+                    </label>
                   </div>
                 ))}
 
-                <button className="btn btn-outline btn-full" style={{ marginTop: 4, justifyContent: 'center' }}
-                  onClick={addSet}>
-                  + Добавить подход
-                </button>
+                {/* Buttons: duplicate last set + add empty */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-outline" style={{ flex: 1, justifyContent: 'center' }} onClick={addSet}>
+                    + Ещё подход
+                  </button>
+                </div>
               </>
             )}
 

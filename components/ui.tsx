@@ -1,8 +1,9 @@
 'use client'
+import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
-// ── Icons ──────────────────────────────────────────
+// ── Icons ──────────────────────────────────────────────────────────────────
 export function IconHome() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>
 }
@@ -64,18 +65,26 @@ export function IconShield() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
 }
 
-// ── Avatar ─────────────────────────────────────────
-export function Avatar({ name, size = 'md', green = false }: { name: string; size?: 'sm'|'md'|'lg'; green?: boolean }) {
+// ── Avatar ─────────────────────────────────────────────────────────────────
+export function Avatar({
+  name, size = 'md', green = false
+}: {
+  name: string; size?: 'sm'|'md'|'lg'; green?: boolean
+}) {
   const initials = name.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase()
-  const sizes = { sm: { width:28,height:28,fontSize:10 }, md: { width:38,height:38,fontSize:13 }, lg: { width:52,height:52,fontSize:18 } }
+  const sizes = {
+    sm: { width: 28, height: 28, fontSize: 10 },
+    md: { width: 38, height: 38, fontSize: 13 },
+    lg: { width: 52, height: 52, fontSize: 18 },
+  }
   return (
-    <div className={`avatar${green?' avatar-green':''}`} style={sizes[size]}>
+    <div className={`avatar${green ? ' avatar-green' : ''}`} style={sizes[size]}>
       {initials}
     </div>
   )
 }
 
-// ── Coach Bottom Nav ───────────────────────────────
+// ── Coach Bottom Nav ───────────────────────────────────────────────────────
 export function CoachNav() {
   const path = usePathname()
   const items = [
@@ -96,7 +105,7 @@ export function CoachNav() {
   )
 }
 
-// ── Athlete Bottom Nav ─────────────────────────────
+// ── Athlete Bottom Nav ─────────────────────────────────────────────────────
 export function AthleteNav() {
   const path = usePathname()
   const items = [
@@ -118,7 +127,7 @@ export function AthleteNav() {
   )
 }
 
-// ── Back Button ────────────────────────────────────
+// ── Back Button ────────────────────────────────────────────────────────────
 export function BackButton({ onClick, label = 'Назад' }: { onClick?: () => void; label?: string }) {
   return (
     <button className="btn btn-ghost btn-sm" onClick={onClick} style={{ gap: 4, padding: '6px 8px' }}>
@@ -128,12 +137,12 @@ export function BackButton({ onClick, label = 'Назад' }: { onClick?: () => 
   )
 }
 
-// ── Section header ─────────────────────────────────
+// ── Section Title ──────────────────────────────────────────────────────────
 export function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div className="section-title">{children}</div>
 }
 
-// ── Empty state ────────────────────────────────────
+// ── Empty State ────────────────────────────────────────────────────────────
 export function EmptyState({ icon = '📋', text }: { icon?: string; text: string }) {
   return (
     <div className="empty-state">
@@ -143,17 +152,24 @@ export function EmptyState({ icon = '📋', text }: { icon?: string; text: strin
   )
 }
 
-// ── Loading spinner ────────────────────────────────
+// ── Spinner ────────────────────────────────────────────────────────────────
 export function Spinner() {
   return <div className="spinner" />
 }
 
-// ── Tag input component ────────────────────────────
-export function TagInput({ tags, onChange, suggestions = [] }: {
-  tags: string[]; onChange: (tags: string[]) => void; suggestions?: string[]
+// ── Tag Input ─────────────────────────────────────────────────────────────
+// FIX: useState import moved to top of file (was at bottom causing potential hoisting issues)
+export function TagInput({
+  tags,
+  onChange,
+  suggestions = [],
+}: {
+  tags: string[]
+  onChange: (tags: string[]) => void
+  suggestions?: string[]
 }) {
-  const [input, setInput] = useState_local('')
-  const [showSugg, setShowSugg] = useState_local(false)
+  const [input, setInput] = useState('')
+  const [showSugg, setShowSugg] = useState(false)
 
   function addTag(tag: string) {
     const t = tag.trim()
@@ -166,15 +182,24 @@ export function TagInput({ tags, onChange, suggestions = [] }: {
     onChange(tags.filter(t => t !== tag))
   }
 
-  const filtered = suggestions.filter(s => s.toLowerCase().includes(input.toLowerCase()) && !tags.includes(s))
+  const filtered = suggestions.filter(
+    s => s.toLowerCase().includes(input.toLowerCase()) && !tags.includes(s)
+  )
 
   return (
     <div>
-      <div className="tag-input-wrap" onClick={() => document.getElementById('tag-inp')?.focus()}>
+      <div
+        className="tag-input-wrap"
+        onClick={() => document.getElementById('tag-inp')?.focus()}
+      >
         {tags.map(tag => (
           <span key={tag} className="tag">
             {tag}
-            <span className="tag-remove" onClick={() => removeTag(tag)}>✕</span>
+            <span
+              className="tag-remove"
+              onClick={e => { e.stopPropagation(); removeTag(tag) }}>
+              ✕
+            </span>
           </span>
         ))}
         <input
@@ -183,14 +208,16 @@ export function TagInput({ tags, onChange, suggestions = [] }: {
           value={input}
           placeholder={tags.length === 0 ? 'Введи тег и нажми Enter' : ''}
           onChange={e => { setInput(e.target.value); setShowSugg(true) }}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (input.trim()) addTag(input) } }}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { e.preventDefault(); if (input.trim()) addTag(input) }
+          }}
           onFocus={() => setShowSugg(true)}
           onBlur={() => setTimeout(() => setShowSugg(false), 150)}
         />
       </div>
       {showSugg && filtered.length > 0 && (
         <div className="suggest-list">
-          {filtered.slice(0,5).map(s => (
+          {filtered.slice(0, 5).map(s => (
             <div key={s} className="suggest-item" onMouseDown={() => addTag(s)}>
               <span style={{ fontSize: 12, color: 'var(--text3)' }}>↩</span> {s}
             </div>
@@ -200,6 +227,3 @@ export function TagInput({ tags, onChange, suggestions = [] }: {
     </div>
   )
 }
-
-// workaround for client component hook usage
-import { useState as useState_local } from 'react'
