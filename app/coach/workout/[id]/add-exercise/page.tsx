@@ -120,6 +120,7 @@ export default function AddExercise() {
           set_number: 1,
           reps: parseInt(ptWarmupReps) || 5,
           weight_kg: ptWarmupWeight ? parseFloat(ptWarmupWeight) : null,
+          weight_pct: null,
           rest_sec: 90,
           is_warmup: true,
           rpe_enabled: false,
